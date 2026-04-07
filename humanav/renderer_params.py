@@ -55,13 +55,16 @@ def create_params():
     return p
 
 def get_path_to_humanav():
-    return '/PATH/TO/HumANav'
+    #return '/PATH/TO/HumANav'
+    return '/home/himanshu/Documents/Research/HumANav-Release'
 
 def get_traversible_dir():
-    return os.path.join(get_path_to_humanav(), 'sd3dis/stanford_building_parser_dataset/traversibles')
+    #return os.path.join(get_path_to_humanav(), 'sd3dis/stanford_building_parser_dataset/traversibles')
+    return '/media/himanshu/DATA/stanford_building_parser_dataset/traversibles'
 
 def get_sbpd_data_dir():
-    return os.path.join(get_path_to_humanav(),'sd3dis/stanford_building_parser_dataset')
+    #return os.path.join(get_path_to_humanav(),'sd3dis/stanford_building_parser_dataset')
+    return '/media/himanshu/DATA/stanford_building_parser_dataset'
 
 def get_surreal_mesh_dir():
     return os.path.join(get_path_to_humanav(), 'surreal/code/human_meshes')

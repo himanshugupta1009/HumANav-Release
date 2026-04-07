@@ -55,6 +55,65 @@ def sample_points_on_faces(vs, fs, rng, n_samples_per_face):
 
 
 class Shape():
+  @staticmethod
+  def _parse_texture_files_from_mtl(obj_file):
+    """Fallback texture loader for pyassimp/libassimp combinations that do not
+    expose usable material file metadata.
+    """
+    obj_dir = os.path.dirname(obj_file)
+    mtl_file = None
+    with open(obj_file, 'r') as f:
+      for line in f:
+        line = line.strip()
+        if line.startswith('mtllib '):
+          mtl_file = os.path.join(obj_dir, line.split(None, 1)[1])
+          break
+
+    if mtl_file is None or not os.path.exists(mtl_file):
+      return []
+
+    texture_files = []
+    with open(mtl_file, 'r') as f:
+      for line in f:
+        line = line.strip()
+        if line.startswith('map_Kd '):
+          texture_files.append(line.split(None, 1)[1])
+    return texture_files
+
+  @classmethod
+  def _get_material_texture_file(cls, mesh, obj_file):
+    dir_name = os.path.dirname(obj_file)
+
+    # Original code path expected this key to exist, but some pyassimp/libassimp
+    # versions expose different semantics or corrupt values here.
+    for key in [('file', 1), ('file', 0), 'file']:
+      try:
+        file_name = mesh.material.properties[key]
+      except (KeyError, TypeError):
+        continue
+
+      if isinstance(file_name, bytes):
+        try:
+          file_name = file_name.decode('utf-8').strip('\x00')
+        except UnicodeDecodeError:
+          file_name = ''
+
+      if file_name:
+        file_name = os.path.join(dir_name, file_name)
+        if os.path.exists(file_name):
+          return file_name
+
+    texture_files = cls._parse_texture_files_from_mtl(obj_file)
+    material_index = mesh.materialindex
+    if material_index < len(texture_files):
+      file_name = os.path.join(dir_name, texture_files[material_index])
+      if os.path.exists(file_name):
+        return file_name
+
+    raise FileNotFoundError(
+        'Could not resolve texture file for material index {:d} in {:s}'.format(
+            material_index, obj_file))
+
   def get_pyassimp_load_options(self):
     load_flags = assimp.postprocess.aiProcess_Triangulate;
     load_flags = load_flags | assimp.postprocess.aiProcess_SortByPType;
@@ -81,15 +140,12 @@ class Shape():
       m.name = name_prefix + m.name + '_{:05d}'.format(i) + name_suffix
     logging.error('#Meshes: %d', len(self.meshes))
 
-    dir_name = os.path.dirname(obj_file)
     # Load materials
     materials = None
     if load_materials:
       materials = []
       for m in self.meshes:
-        file_name = os.path.join(dir_name, m.material.properties[('file', 1)])
-        assert(os.path.exists(file_name)), \
-            'Texture file {:s} foes not exist.'.format(file_name)
+        file_name = self._get_material_texture_file(m, obj_file)
         materials.append(self._load_materials_from_file(file_name, materials_scale))
     self.scene = scene
     self.materials = materials
@@ -158,8 +214,9 @@ class Shape():
     return p, face_areas, face_idx
   
   def __del__(self):
-    scene = self.scene
-    assimp.release(scene)
+    scene = getattr(self, 'scene', None)
+    if scene is not None:
+      assimp.release(scene)
 
 class HumanShape(Shape):
     def __init__(self, obj_file, human_materials, name_prefix='', name_suffix=''):
@@ -249,6 +306,8 @@ class SwiftshaderRenderer():
 
 
   def init_renderer_egl(self, width, height):
+    # Headless Linux setups often need an explicit EGL platform hint.
+    os.environ.setdefault('EGL_PLATFORM', 'surfaceless')
     major,minor = ctypes.c_long(),ctypes.c_long()
     logging.debug('init_renderer_egl: EGL_DEFAULT_DISPLAY: %s', EGL_DEFAULT_DISPLAY)
     egl_default_display = EGL_DEFAULT_DISPLAY #EGLNativeDisplayType.from_param(0)
@@ -619,10 +678,19 @@ class SwiftshaderRenderer():
           assert (len(human_keys) == 0)
 
   def __del__(self):
-    self.clear_scene()
-    eglMakeCurrent(self.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)
-    eglDestroySurface(self.egl_display, self.egl_surface)
-    eglTerminate(self.egl_display)
+    egl_display = getattr(self, 'egl_display', None)
+    egl_surface = getattr(self, 'egl_surface', None)
+    if egl_display is None:
+      return
+    try:
+      self.clear_scene()
+      eglMakeCurrent(egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)
+      if egl_surface is not None:
+        eglDestroySurface(egl_display, egl_surface)
+      eglTerminate(egl_display)
+    except Exception:
+      # Python interpreter shutdown can invalidate OpenGL imports/context.
+      pass
 
 def get_r_obj(camera_param):
   cp = camera_param

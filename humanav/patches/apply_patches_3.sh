@@ -13,5 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-patch $CONDA_PREFIX/lib/python3.6/site-packages/OpenGL/GLES2/VERSION/GLES2_2_0.py patches/GLES2_2_0.py.patch
+#patch $CONDA_PREFIX/lib/python3.6/site-packages/OpenGL/GLES2/VERSION/GLES2_2_0.py patches/GLES2_2_0.py.patch
 
+SITE_PKGS=$(python -c "import site; print(site.getsitepackages()[0])")
+patch "$SITE_PKGS/OpenGL/GLES2/VERSION/GLES2_2_0.py" patches/GLES2_2_0.py.patch
