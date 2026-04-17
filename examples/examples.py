@@ -1,3 +1,9 @@
+# Under HumANavRelease/examples
+#This is no longer the file from the original HumANavRelease repo.
+#This file is the file needed to run the Visual Tree Search code.
+
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -6,11 +12,18 @@ from humanav.humanav_renderer import HumANavRenderer
 from humanav.renderer_params import create_params as create_base_params
 from humanav.renderer_params import get_surreal_texture_dir
 
+
+IMAGE_SIZE = 512.
+HUMANAV_PATH = '/home/himanshu/Documents/Research/HumANav-Release/'
+# DEFAULT_OUTPUT_PATH = os.path.join(HUMANAV_PATH, 'generated_data')
+DEFAULT_OUTPUT_PATH = '/home/himanshu/Documents/Research/VBA/VBA_training_data'
+
+
 def create_params():
     p = create_base_params()
 
 	# Set any custom parameters
-    p.building_name = 'area3'
+    p.building_name = 'area5a' #'area3'
 
     p.camera_params.width = 1024
     p.camera_params.height = 1024
@@ -25,6 +38,70 @@ def create_params():
 
     p.camera_params.modalities = ['rgb', 'disparity']
     return p
+
+
+def get_output_path():
+    return os.environ.get('HUMANAV_OUTPUT_PATH', DEFAULT_OUTPUT_PATH)
+
+
+def plot_top_view(traversible, dx_m,
+                camera_pos_13, filename):
+     # Compute the real_world extent (in meters) of the traversible
+    extent = [0., traversible.shape[1], 0., traversible.shape[0]]
+    extent = np.array(extent)*dx_m
+
+    fig = plt.figure(figsize=(30, 10))
+
+    # Plot the 5x5 meter occupancy grid centered around the camera
+    plt.imshow(traversible, extent=extent, cmap='gray',
+              vmin=-.5, vmax=1.5, origin='lower')
+
+    #plt.xlim([camera_pos_13[0, 0]-10., camera_pos_13[0, 0]+10.])
+    #plt.ylim([camera_pos_13[0, 1]-10., camera_pos_13[0, 1]+10.])
+
+    # Plot the camera
+    plt.plot(camera_pos_13[0, 0], camera_pos_13[0, 1], 'bo', markersize=10, label='Camera')
+    plt.quiver(camera_pos_13[0, 0], camera_pos_13[0, 1], np.cos(camera_pos_13[0, 2]), np.sin(camera_pos_13[0, 2]))
+
+    plt.legend()
+    #plt.set_xlim([camera_pos_13[0, 0]-5., camera_pos_13[0, 0]+5.])
+    #plt.set_ylim([camera_pos_13[0, 1]-5., camera_pos_13[0, 1]+5.])
+    #ax.set_xticks([])
+    #ax.set_yticks([])
+    #ax.set_title('Topview')
+
+    fig.savefig(filename, bbox_inches='tight', pad_inches=0)
+
+
+def plot_rgb(rgb_image_1mk3, filename):
+    import cv2
+    #fig = plt.figure(figsize=(30, 10))
+
+    src = rgb_image_1mk3[0].astype(np.uint8)
+    src = src[:,:,::-1]   ## CV2 works in BGR space instead of RGB
+    #percent by which the image is resized
+    scale_percent = (IMAGE_SIZE/src.shape[0]) * 100
+
+    width = int(src.shape[1] * scale_percent / 100)
+    height = int(src.shape[0] * scale_percent / 100)
+
+    # dsize
+    dsize = (width, height)
+
+    # resize image
+    output = cv2.resize(src, dsize)
+
+    # Plot the RGB Image
+    #plt.imshow(output)
+    #plt.imshow(rgb_image_1mk3[0].astype(np.uint8))
+    #ax.set_xticks([])
+    #ax.set_yticks([])
+    #ax.set_title('RGB')
+
+    cv2.imwrite(filename, output)
+    #cv2.imwrite('original.png', src) 
+    
+    #fig.savefig(filename, bbox_inches='tight', pad_inches=0)
 
 
 def plot_images(rgb_image_1mk3, depth_image_1mk1, traversible, dx_m,
@@ -72,17 +149,131 @@ def plot_images(rgb_image_1mk3, depth_image_1mk1, traversible, dx_m,
     fig.savefig(filename, bbox_inches='tight', pad_inches=0)
 
 
-def render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=True):
+def render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=False):
     # Convert from real world units to grid world units
     camera_grid_world_pos_12 = camera_pos_13[:, :2]/dx_m
 
     # Render RGB and Depth Images. The shape of the resulting
     # image is (1 (batch), m (width), k (height), c (number channels))
-    rgb_image_1mk3 = r._get_rgb_image(camera_grid_world_pos_12, camera_pos_13[:, 2:3], human_visible=True)
+    rgb_image_1mk3 = r._get_rgb_image(camera_grid_world_pos_12, camera_pos_13[:, 2:3], human_visible=False)
 
     depth_image_1mk1, _, _ = r._get_depth_image(camera_grid_world_pos_12, camera_pos_13[:, 2:3], xy_resolution=.05, map_size=1500, pos_3=camera_pos_13[0, :3], human_visible=True)
 
     return rgb_image_1mk3, depth_image_1mk1
+
+
+def generate_training_data_easy(num_data, path):
+    i = 0
+    while i < num_data:
+        theta = np.random.rand() * 0.9
+        if theta >= 0.2:
+            camera_pos_13 = np.array([[8, 24, theta]])
+            generate_one_data(camera_pos_13, path)
+            i += 1
+
+
+def generate_training_data_medium(num_data, path):
+    i = 0
+    while i < num_data: 
+        theta = np.random.rand() * 2*np.pi
+        camera_pos_13 = np.array([[8, 24, theta]])
+        generate_one_data(camera_pos_13, path)
+        i += 1
+
+
+def generate_training_data_hard(num_data, path):
+     # Good corridor range:
+    # x: 8.0 to 9.0
+    # y: 20.0 to 25.0, can extend down to 17 or 16 at least
+    # any theta out of 8 cardinal directions
+
+    thetas = [0.0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi, 5*np.pi/4, 3*np.pi/2, 7*np.pi/4]
+    i = 0
+    while i < num_data:
+        theta = thetas[np.random.randint(len(thetas))]
+        x = np.random.rand() + 8.0
+        y = np.random.rand() * 5 + 20.0
+        camera_pos_13 = np.array([[x, y, theta]])
+        generate_one_data(camera_pos_13, path)
+        i += 1
+
+
+def generate_training_data_hallway(num_data, path):
+    # Good corridor range:
+    # x 24 to 32.5
+    # y 23 to 24.5
+    # # any theta out of 8 cardinal directions
+
+    thetas = [0.0, np.pi/4, np.pi/2, 3*np.pi/4, np.pi, 5*np.pi/4, 3*np.pi/2, 7*np.pi/4]
+    i = 0
+    while i < num_data:
+        theta = thetas[np.random.randint(len(thetas))]
+        x = np.random.rand() * 8.5 + 24.0
+        y = np.random.rand() * 1.5 + 23.0
+        camera_pos_13 = np.array([[x, y, theta]])
+        generate_one_data(camera_pos_13, path)
+        i += 1
+
+
+def generate_training_data_analysis(num_data, path):
+    theta = np.pi
+    ys = np.linspace(20.0, 25.0, num_data)   
+    x = 8.0
+    for y in ys:
+        camera_pos_13 = np.array([[x, y, theta]])
+        generate_one_data(camera_pos_13, path)
+
+
+def generate_one_data(camera_pos_13, path):
+    p = create_params()
+
+    r = HumANavRenderer.get_renderer(p)
+    dx_cm, traversible = r.get_config()
+
+    # Convert the grid spacing to units of meters. Should be 5cm for the S3DIS data
+    dx_m = dx_cm/100.
+
+    # State of the camera. 
+    # Specified as [x (meters), y (meters), theta (radians)] coordinates
+    #camera_pos_13 = np.array([[7.5, 12., -1.3]])
+    #camera_pos_13 = np.array([[8, 24, 0.2]])
+
+    rgb_image_1mk3, depth_image_1mk1 = render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=False)
+
+    camera_pos_str = '_' + str(camera_pos_13[0][0]) + '_' + str(camera_pos_13[0][1]) + '_' + str(camera_pos_13[0][2])
+    filename_topdown = 'top_view' + camera_pos_str + '.png'
+    filename_rgb = 'rgb' + camera_pos_str + '.png'
+
+    # Plot the rendered images
+    base_output_path = get_output_path()
+    path_top_down = os.path.join(base_output_path, path, 'top_downs')
+    path_rgbs = os.path.join(base_output_path, path, 'rgbs')
+    os.makedirs(path_top_down, exist_ok=True)
+    os.makedirs(path_rgbs, exist_ok=True)
+    plot_top_view(traversible, dx_m, camera_pos_13, os.path.join(path_top_down, filename_topdown))
+    plot_rgb(rgb_image_1mk3, os.path.join(path_rgbs, filename_rgb))
+
+
+def generate_observation(camera_pos_13, path):
+    p = create_params()
+
+    r = HumANavRenderer.get_renderer(p)
+    dx_cm, traversible = r.get_config()
+
+    # Convert the grid spacing to units of meters. Should be 5cm for the S3DIS data
+    dx_m = dx_cm/100.
+
+    rgb_image_1mk3, depth_image_1mk1 = render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=False)
+
+    camera_pos_str = '_' + str(camera_pos_13[0][0]) + '_' + str(camera_pos_13[0][1]) + '_' + str(camera_pos_13[0][2])
+    filename_rgb = 'rgb' + camera_pos_str + '.png'
+
+    # Plot the rendered images
+    os.makedirs(path, exist_ok=True)
+    plot_rgb(rgb_image_1mk3, os.path.join(path, filename_rgb))
+
+    return os.path.join(path, filename_rgb), traversible, dx_m
+
 
 def example1():
     """
@@ -107,26 +298,37 @@ def example1():
 
     # State of the camera and the human. 
     # Specified as [x (meters), y (meters), theta (radians)] coordinates
-    camera_pos_13 = np.array([[7.5, 12., -1.3]])
+    #camera_pos_13 = np.array([[7.5, 12., -1.3]])
+    camera_pos_13 = np.array([[8, 24, 0.2]])
+    #camera_pos_13 = np.array([[32.5, 24, np.pi/4]])
     human_pos_3 = np.array([8.0, 9.75, np.pi/2.])
 
     # Speed of the human in m/s
     human_speed = 0.7
 
     # Load a random human at a specified state and speed
-    r.add_human_at_position_with_speed(human_pos_3, human_speed, identity_rng, mesh_rng)
+    #r.add_human_at_position_with_speed(human_pos_3, human_speed, identity_rng, mesh_rng)
 
     # Get information about which mesh was loaded
-    human_mesh_info = r.human_mesh_params
+    #human_mesh_info = r.human_mesh_params
 
-    rgb_image_1mk3, depth_image_1mk1 = render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=True)
+    rgb_image_1mk3, depth_image_1mk1 = render_rgb_and_depth(r, camera_pos_13, dx_m, human_visible=False)
 
     # Remove the human from the environment
-    r.remove_human()
+    #r.remove_human()
+
+    camera_pos_str = '_' + str(camera_pos_13[0][0]) + '_' + str(camera_pos_13[0][1]) + '_' + str(camera_pos_13[0][2])
+    filename_topdown = 'top_view' + camera_pos_str + '.png'
+    filename_rgb = 'rgb' + camera_pos_str + '.png'
 
     # Plot the rendered images
+    os.makedirs(HUMANAV_PATH + 'top_downs/', exist_ok=True)
+    os.makedirs(HUMANAV_PATH + 'rgbs/', exist_ok=True)
+    plot_top_view(traversible, dx_m, camera_pos_13, HUMANAV_PATH + 'top_downs/' + filename_topdown)
+    plot_rgb(rgb_image_1mk3, HUMANAV_PATH + 'rgbs/' + filename_rgb)
+
     plot_images(rgb_image_1mk3, depth_image_1mk1, traversible, dx_m,
-                camera_pos_13, human_pos_3, 'example1.png')
+                camera_pos_13, human_pos_3, 'example1_15.png')
 
 
 def get_known_human_identity(r):
@@ -189,5 +391,8 @@ def example2():
 
 
 if __name__ == '__main__':
-    example1() 
-    example2() 
+    # example1() 
+    # example2() 
+
+    generate_training_data_hallway(16000, 'training_hallway')
+    # generate_training_data_easy(16, 'training_hard')
