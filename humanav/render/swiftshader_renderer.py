@@ -214,9 +214,11 @@ class Shape():
     return p, face_areas, face_idx
   
   def __del__(self):
-    scene = getattr(self, 'scene', None)
-    if scene is not None:
-      assimp.release(scene)
+    # scene = getattr(self, 'scene', None)
+    # if scene is not None:
+    #   assimp.release(scene)
+    #   self.scene = None
+    pass
 
 class HumanShape(Shape):
     def __init__(self, obj_file, human_materials, name_prefix='', name_suffix=''):
@@ -501,10 +503,10 @@ class SwiftshaderRenderer():
         np_d_img = screenshot_d[::-1,:,:3];
         np_d_img = np_d_img[:,:,2]*(255.*255./c) + np_d_img[:,:,1]*(255./c) + np_d_img[:,:,0]*(1./c)
         np_d_img = np_d_img.astype(np.float32)
-        # np_d_img[np_d_img == 0] = np.NaN
+        # np_d_img[np_d_img == 0] = np.nan
         np_d_img = np_d_img[:,:,np.newaxis]
         d = np_d_img
-        d[d < 0.01] = np.NaN; isnan = np.isnan(d);
+        d[d < 0.01] = np.nan; isnan = np.isnan(d);
         d = 100./d; d[isnan] = 0.;
         d = np.concatenate((d, isnan), axis=2)
         np_d_img = d

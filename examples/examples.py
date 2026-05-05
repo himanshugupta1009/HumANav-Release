@@ -13,10 +13,10 @@ from humanav.renderer_params import create_params as create_base_params
 from humanav.renderer_params import get_surreal_texture_dir
 
 
-IMAGE_SIZE = 512.
+IMAGE_SIZE = 32.
 HUMANAV_PATH = '/home/himanshu/Documents/Research/HumANav-Release/'
 # DEFAULT_OUTPUT_PATH = os.path.join(HUMANAV_PATH, 'generated_data')
-DEFAULT_OUTPUT_PATH = '/home/himanshu/Documents/Research/VBA/VBA_training_data'
+DEFAULT_OUTPUT_PATH = '/home/himanshu/Documents/Research/VBA/VBA_training_data_32'
 
 
 def create_params():
